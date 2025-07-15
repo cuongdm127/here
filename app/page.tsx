@@ -1,103 +1,210 @@
-import Image from "next/image";
+"use client";
+import React, { useState, useEffect } from "react";
+import { Card } from "@/components/ui/card";
+import { Heart, Smile } from "lucide-react";
 
-export default function Home() {
+interface EnvelopeResponse {
+  content: string;
+  emotion?: string;
+}
+interface Announcement {
+  id: string;
+  nickname: string;
+}
+
+export default function HomePage() {
+  const [randomMsg, setRandomMsg] = useState<EnvelopeResponse | null>(null);
+  const [loadingRandom, setLoadingRandom] = useState(true);
+
+  const [nickname, setNickname] = useState("");
+  const [content, setContent] = useState("");
+  const [emotion, setEmotion] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [loadingAnn, setLoadingAnn] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/envelope", { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => setRandomMsg(data))
+      .catch(() => setRandomMsg(null))
+      .finally(() => setLoadingRandom(false));
+
+    fetch("/api/messages/announcements")
+      .then((res) => res.json())
+      .then((data) => setAnnouncements(data))
+      .catch(() => setAnnouncements([]))
+      .finally(() => setLoadingAnn(false));
+  }, []);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nickname.trim() || !content.trim()) {
+      setError("Vui lòng nhập tên và tin nhắn.");
+      return;
+    }
+    setSending(true);
+    setError(null);
+    try {
+      // POST new message
+      const resPost = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nickname,
+          content,
+          emotion: emotion || undefined,
+        }),
+      });
+
+      // handle moderation error
+      if (resPost.status === 400) {
+        const errData = await resPost.json();
+        console.log(errData)
+        if (errData.error === "Content is not good!") {
+          setError("Nào! Hãy chỉ gửi những điều đẹp đẽ thôi nha!");
+        } else {
+          setError("Gửi thất bại, vui lòng thử lại.");
+        }
+        setSending(false);
+        return;
+      }
+
+      // handle other errors
+      if (!resPost.ok) {
+        setError("Gửi thất bại, vui lòng thử lại.");
+        setSending(false);
+        return;
+      }
+
+      // refresh announcements
+      const resAnn = await fetch("/api/messages/announcements");
+      setAnnouncements(await resAnn.json());
+
+      // reset form
+      setNickname("");
+      setContent("");
+      setEmotion("");
+      setShowForm(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setError("Gửi thất bại, vui lòng thử lại.");
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen bg-[#f4e6cd] py-12">
+      <div className="max-w-4xl mx-auto p-6 flex flex-col md:flex-row gap-12">
+        {/* Left column: Greeting, Random Message, Prompt/Form */}
+        <div className="flex-1 space-y-12">
+          <section className="text-center space-y-6">
+            <h1 className="text-4xl font-sans text-gray-800">
+              I am here!{" "}
+              <Smile className="inline-block w-8 h-8 text-yellow-500 animate-pulse" />
+            </h1>
+            {loadingRandom ? (
+              <p className="italic text-gray-600">Đang tải lời nhắn…</p>
+            ) : randomMsg ? (
+              <Card className="mt-4 border-l-4 border-[#888151] bg-white rounded-2xl shadow-sm p-6">
+                <div className="flex items-start space-x-4">
+                  <Heart className="w-6 h-6 text-[#888151] mt-1" />
+                  <div>
+                    <p className="text-lg text-gray-700">{randomMsg.content}</p>
+                    {randomMsg.emotion && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        #{randomMsg.emotion}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ) : (
+              <p className="italic text-gray-600">Không có lời nhắn nào.</p>
+            )}
+          </section>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          {!showForm ? (
+            <section className="text-center space-y-4">
+              <p className="text-lg text-gray-800">
+                Bạn có muốn gửi một lời dễ thương đến ai đó ngoài kia đang cần
+                không?
+              </p>
+              <button
+                onClick={() => setShowForm(true)}
+                className="px-6 py-3 bg-[#888151] text-white rounded-full hover:bg-[#777041] transition"
+              >
+                Có ạ
+              </button>
+            </section>
+          ) : (
+            <section className="space-y-6">
+              <form onSubmit={handleSend} className="space-y-4">
+                <input
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  placeholder="Tên của bạn (ví dụ: Bạn A)"
+                  className="w-full border border-[#888151] text-gray-700 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#888151]"
+                />
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  maxLength={500}
+                  rows={4}
+                  placeholder="Trút bầu tâm sự..."
+                  className="w-full border border-[#888151] text-gray-700 rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-[#888151]"
+                />
+                <input
+                  type="text"
+                  value={emotion}
+                  onChange={(e) => setEmotion(e.target.value)}
+                  placeholder="#emotion (tùy chọn)"
+                  className="w-full border border-[#888151] text-gray-700 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#888151]"
+                />
+                {error && <p className="text-red-600">{error}</p>}
+                <button
+                  type="submit"
+                  disabled={sending}
+                  className="w-full py-3 bg-[#888151] text-white rounded-full hover:bg-[#777041] transition disabled:opacity-50"
+                >
+                  {sending ? "Đang gửi..." : "Gửi tin nhắn yêu thương"}
+                </button>
+              </form>
+            </section>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Right column: Announcements */}
+        <aside className="w-full md:w-1/3">
+          <h2 className="text-2xl font-sans text-gray-800 mb-4">
+            Gửi gắm niềm an yên
+          </h2>
+          {loadingAnn ? (
+            <p className="text-gray-600">Đang tải hoạt động…</p>
+          ) : (
+            <ul className="space-y-3">
+              {announcements.map((item) => (
+                <li key={item.id} className="text-gray-700">
+                  <span className="font-semibold text-[#888151]">
+                    {item.nickname}
+                  </span>{" "}
+                  vừa gửi đi một điều đẹp đẽ.
+                </li>
+              ))}
+            </ul>
+          )}
+          {!loadingAnn && (
+            <button className="mt-6 text-[#888151] hover:underline">
+              Xem thêm hoạt động
+            </button>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }
